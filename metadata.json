@@ -1,0 +1,9 @@
+{
+  "name": "Fitness Progress Tracker",
+  "description": "AI-powered personal fitness progress tracking with camera body & posture analysis, workout form checker, fitness calculators, and habit logging.",
+  "requestFramePermissions": [
+    "android.permission.CAMERA"
+  ],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
