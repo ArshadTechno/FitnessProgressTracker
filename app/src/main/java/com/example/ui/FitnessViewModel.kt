@@ -127,8 +127,10 @@ class FitnessViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch {
             repository.allMeasurements.collect { list ->
                 if (list.isEmpty()) {
+                    repository.addMeasurement(79.4, 19.0, 87.0, 101.5, 35.5, "Starting transformation phase", "15 - 06 - 2026")
                     repository.addMeasurement(78.5, 18.2, 86.0, 102.0, 36.0, "Initial assessment baseline", "01 - 07 - 2026")
-                    repository.addMeasurement(77.2, 17.1, 84.5, 103.0, 36.5, "Week 4 progress update", "28 - 07 - 2026")
+                    repository.addMeasurement(77.2, 17.1, 84.5, 103.0, 36.5, "Week 4 progress update", "22 - 07 - 2026")
+                    repository.addMeasurement(76.4, 16.4, 83.5, 103.5, 36.8, "Mid-cycle check-in", "08 - 08 - 2026")
                     repository.addMeasurement(75.8, 15.8, 82.8, 104.0, 37.2, "Current active phase", "25 - 08 - 2026")
                 }
             }

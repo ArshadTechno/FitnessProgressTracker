@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.local.BodyMeasurementEntity
 import com.example.ui.FitnessViewModel
+import com.example.ui.components.GeometricWeightChart
 import com.example.ui.theme.EmeraldPrimary
 
 @Composable
@@ -87,7 +88,15 @@ fun MeasurementTrackerScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // Latest Snapshot Card
+            // 1. Geometric Weight & Composition Trend Chart
+            item {
+                GeometricWeightChart(
+                    measurements = measurements,
+                    targetGoalValue = 72.0
+                )
+            }
+
+            // 2. Latest Snapshot Card
             if (latest != null) {
                 item {
                     Card(
