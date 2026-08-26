@@ -47,11 +47,12 @@ jobs:
 
       - name: Build Debug APK
         run: |
+          export GRADLE_OPTS="-Djava.awt.headless=true"
           if [ -f ./gradlew ]; then
             chmod +x ./gradlew
-            ./gradlew :app:assembleDebug --no-daemon
+            ./gradlew :app:assembleDebug --no-daemon -Djava.awt.headless=true
           else
-            gradle :app:assembleDebug --no-daemon
+            gradle :app:assembleDebug --no-daemon -Djava.awt.headless=true
           fi
 
       - name: Upload Debug APK Artifact
