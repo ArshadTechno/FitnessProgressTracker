@@ -9,9 +9,11 @@ import androidx.room.RoomDatabase
     entities = [
         FitnessScanEntity::class,
         BodyMeasurementEntity::class,
-        WorkoutLogEntity::class
+        WorkoutLogEntity::class,
+        HabitEntity::class,
+        HabitLogEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class FitnessDatabase : RoomDatabase() {

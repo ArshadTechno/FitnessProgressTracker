@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.MonitorWeight
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Whatshot
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -42,6 +43,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -61,7 +63,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
+import com.example.ui.FitnessViewModel
 import com.example.ui.ScreenDestination
+import com.example.ui.components.HomeHabitsWidget
 import com.example.ui.components.shareOnWhatsApp
 import com.example.ui.theme.EmeraldContainerDark
 import com.example.ui.theme.EmeraldDark
@@ -75,11 +79,19 @@ import java.util.Locale
 fun HomeScreen(
     onNavigate: (ScreenDestination) -> Unit,
     onRateUsClicked: () -> Unit,
+    viewModel: FitnessViewModel? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val todayFormatted = remember {
         SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()).format(Date())
+    }
+    val todayDateString = remember { FitnessViewModel.getTodayDateString() }
+
+    val habits = viewModel?.habits?.collectAsState()?.value ?: emptyList()
+    val habitLogs = viewModel?.habitLogs?.collectAsState()?.value ?: emptyList()
+    val weeklySummary = remember(habitLogs, habits, todayDateString) {
+        viewModel?.calculateWeeklyConsistencySummary(habitLogs, habits, todayDateString)
     }
 
     LazyColumn(
@@ -213,6 +225,24 @@ fun HomeScreen(
             }
         }
 
+        // Today's Fitness Goals & 7-Day Consistency Quick Widget
+        if (habits.isNotEmpty() && weeklySummary != null) {
+            item {
+                HomeHabitsWidget(
+                    habits = habits,
+                    habitLogs = habitLogs,
+                    todayDateString = todayDateString,
+                    weeklySummary = weeklySummary,
+                    onToggleHabit = { habitId ->
+                        viewModel?.toggleHabit(habitId, todayDateString)
+                    },
+                    onOpenFullHabits = {
+                        onNavigate(ScreenDestination.DailyHabits)
+                    }
+                )
+            }
+        }
+
         // 2. Menu Navigation Cards (Matching Screenshot 1 style with thick rounded borders & icons)
         item {
             FitnessMenuCard(
@@ -241,6 +271,16 @@ fun HomeScreen(
                 title = "Body Measurements & Transformation",
                 subtitle = "Log weight, body fat %, waist & arm trends",
                 onClick = { onNavigate(ScreenDestination.Measurements) }
+            )
+        }
+
+        item {
+            FitnessMenuCard(
+                icon = Icons.Default.Whatshot,
+                iconBgColor = Color(0xFFEA580C),
+                title = "Daily Habit Tracker & Streaks",
+                subtitle = "Track water, cardio, protein & visual streaks",
+                onClick = { onNavigate(ScreenDestination.DailyHabits) }
             )
         }
 

@@ -46,4 +46,39 @@ interface FitnessDao {
 
     @Delete
     suspend fun deleteWorkoutLog(workoutLog: WorkoutLogEntity)
+
+    // Habits
+    @Query("SELECT * FROM habits ORDER BY id ASC")
+    fun getAllHabits(): Flow<List<HabitEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertHabit(habit: HabitEntity): Long
+
+    @Update
+    suspend fun updateHabit(habit: HabitEntity)
+
+    @Delete
+    suspend fun deleteHabit(habit: HabitEntity)
+
+    @Query("DELETE FROM habits WHERE id = :id")
+    suspend fun deleteHabitById(id: Long)
+
+    // Habit Logs
+    @Query("SELECT * FROM habit_logs ORDER BY timestamp DESC")
+    fun getAllHabitLogs(): Flow<List<HabitLogEntity>>
+
+    @Query("SELECT * FROM habit_logs WHERE dateFormatted = :dateFormatted")
+    fun getHabitLogsForDate(dateFormatted: String): Flow<List<HabitLogEntity>>
+
+    @Query("SELECT * FROM habit_logs WHERE habitId = :habitId ORDER BY timestamp DESC")
+    fun getLogsForHabit(habitId: Long): Flow<List<HabitLogEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertHabitLog(log: HabitLogEntity): Long
+
+    @Query("DELETE FROM habit_logs WHERE habitId = :habitId AND dateFormatted = :dateFormatted")
+    suspend fun deleteHabitLog(habitId: Long, dateFormatted: String)
+
+    @Query("DELETE FROM habit_logs WHERE habitId = :habitId")
+    suspend fun clearLogsForHabit(habitId: Long)
 }

@@ -6,6 +6,8 @@ import com.example.data.gemini.FitnessAnalysisResult
 import com.example.data.local.BodyMeasurementEntity
 import com.example.data.local.FitnessDao
 import com.example.data.local.FitnessScanEntity
+import com.example.data.local.HabitEntity
+import com.example.data.local.HabitLogEntity
 import com.example.data.local.WorkoutLogEntity
 import kotlinx.coroutines.flow.Flow
 import java.text.SimpleDateFormat
@@ -17,6 +19,8 @@ class FitnessRepository(private val fitnessDao: FitnessDao) {
     val allScans: Flow<List<FitnessScanEntity>> = fitnessDao.getAllScans()
     val allMeasurements: Flow<List<BodyMeasurementEntity>> = fitnessDao.getAllMeasurements()
     val allWorkoutLogs: Flow<List<WorkoutLogEntity>> = fitnessDao.getAllWorkoutLogs()
+    val allHabits: Flow<List<HabitEntity>> = fitnessDao.getAllHabits()
+    val allHabitLogs: Flow<List<HabitLogEntity>> = fitnessDao.getAllHabitLogs()
 
     suspend fun saveScanResult(result: FitnessAnalysisResult, notes: String = ""): Long {
         val dateFormat = SimpleDateFormat("dd - MM - yyyy", Locale.getDefault())
@@ -95,5 +99,64 @@ class FitnessRepository(private val fitnessDao: FitnessDao) {
 
     suspend fun deleteWorkoutLog(workoutLog: WorkoutLogEntity) {
         fitnessDao.deleteWorkoutLog(workoutLog)
+    }
+
+    // Habits API
+    suspend fun addHabit(
+        title: String,
+        category: String,
+        iconKey: String,
+        colorHex: Long,
+        frequency: String = "Daily",
+        targetDaily: Int = 1
+    ): Long {
+        val habit = HabitEntity(
+            title = title,
+            category = category,
+            frequency = frequency,
+            iconKey = iconKey,
+            colorHex = colorHex,
+            targetDaily = targetDaily
+        )
+        return fitnessDao.insertHabit(habit)
+    }
+
+    suspend fun updateHabit(habit: HabitEntity) {
+        fitnessDao.updateHabit(habit)
+    }
+
+    suspend fun deleteHabit(habit: HabitEntity) {
+        fitnessDao.clearLogsForHabit(habit.id)
+        fitnessDao.deleteHabit(habit)
+    }
+
+    suspend fun toggleHabitLog(habitId: Long, dateFormatted: String, isCurrentlyCompleted: Boolean, note: String = "") {
+        if (isCurrentlyCompleted) {
+            fitnessDao.deleteHabitLog(habitId, dateFormatted)
+        } else {
+            val log = HabitLogEntity(
+                habitId = habitId,
+                dateFormatted = dateFormatted,
+                timestamp = System.currentTimeMillis(),
+                isCompleted = true,
+                note = note
+            )
+            fitnessDao.insertHabitLog(log)
+        }
+    }
+
+    suspend fun logHabitExplicit(habitId: Long, dateFormatted: String, isCompleted: Boolean, note: String = "") {
+        if (isCompleted) {
+            val log = HabitLogEntity(
+                habitId = habitId,
+                dateFormatted = dateFormatted,
+                timestamp = System.currentTimeMillis(),
+                isCompleted = true,
+                note = note
+            )
+            fitnessDao.insertHabitLog(log)
+        } else {
+            fitnessDao.deleteHabitLog(habitId, dateFormatted)
+        }
     }
 }

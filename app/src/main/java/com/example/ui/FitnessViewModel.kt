@@ -1,6 +1,7 @@
 package com.example.ui
 
 import android.app.Application
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
@@ -12,13 +13,20 @@ import com.example.data.gemini.FitnessAnalysisResult
 import com.example.data.local.BodyMeasurementEntity
 import com.example.data.local.FitnessDatabase
 import com.example.data.local.FitnessScanEntity
+import com.example.data.local.HabitDayInfo
+import com.example.data.local.HabitEntity
+import com.example.data.local.HabitLogEntity
+import com.example.data.local.WeeklyDayConsistency
+import com.example.data.local.WeeklyConsistencySummary
 import com.example.data.local.WorkoutLogEntity
 import com.example.data.repository.FitnessRepository
 import com.example.domain.FitnessCalculators
+import com.example.util.HabitReminderManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.io.InputStream
@@ -31,6 +39,7 @@ sealed class ScreenDestination {
     object Home : ScreenDestination()
     object CameraAnalysis : ScreenDestination()
     object Measurements : ScreenDestination()
+    object DailyHabits : ScreenDestination()
     object WorkoutLogs : ScreenDestination()
     object Calculators : ScreenDestination()
     object GymsNearMe : ScreenDestination()
@@ -52,11 +61,25 @@ class FitnessViewModel(application: Application) : AndroidViewModel(application)
     val scans: StateFlow<List<FitnessScanEntity>>
     val measurements: StateFlow<List<BodyMeasurementEntity>>
     val workoutLogs: StateFlow<List<WorkoutLogEntity>>
+    val habits: StateFlow<List<HabitEntity>>
+    val habitLogs: StateFlow<List<HabitLogEntity>>
+
+    private val _selectedHabitDate = MutableStateFlow(getTodayDateString())
+    val selectedHabitDate: StateFlow<String> = _selectedHabitDate.asStateFlow()
+
+    private val _isReminderDismissed = MutableStateFlow(false)
+    val isReminderDismissed: StateFlow<Boolean> = _isReminderDismissed.asStateFlow()
+
+    private val _forceShowReminder = MutableStateFlow(false)
+
+    val show8PmHabitReminder: StateFlow<Boolean>
 
     private val _currentScreen = MutableStateFlow<ScreenDestination>(ScreenDestination.Home)
     val currentScreen: StateFlow<ScreenDestination> = _currentScreen.asStateFlow()
 
-    private val _isDarkMode = MutableStateFlow(false)
+    private val sharedPrefs = application.getSharedPreferences("fitness_tracker_preferences", Context.MODE_PRIVATE)
+
+    private val _isDarkMode = MutableStateFlow(sharedPrefs.getBoolean("pref_dark_theme", false))
     val isDarkMode: StateFlow<Boolean> = _isDarkMode.asStateFlow()
 
     private val _analysisState = MutableStateFlow<AiAnalysisUiState>(AiAnalysisUiState.Idle)
@@ -123,6 +146,38 @@ class FitnessViewModel(application: Application) : AndroidViewModel(application)
             emptyList()
         )
 
+        habits = repository.allHabits.stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5000),
+            emptyList()
+        )
+
+        habitLogs = repository.allHabitLogs.stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5000),
+            emptyList()
+        )
+
+        show8PmHabitReminder = combine(
+            habits,
+            habitLogs,
+            _isReminderDismissed,
+            _forceShowReminder
+        ) { habitList, logs, isDismissed, force ->
+            if (isDismissed) return@combine false
+            if (habitList.isEmpty()) return@combine false
+            val todayStr = getTodayDateString()
+            val completedToday = habitList.count { habit ->
+                logs.any { it.habitId == habit.id && it.dateFormatted == todayStr && it.isCompleted }
+            }
+            val isTimePast8 = HabitReminderManager.isPast8Pm()
+            (isTimePast8 || force) && completedToday == 0
+        }.stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5000),
+            false
+        )
+
         // Populate initial demo measurements and logs if empty
         viewModelScope.launch {
             repository.allMeasurements.collect { list ->
@@ -146,6 +201,15 @@ class FitnessViewModel(application: Application) : AndroidViewModel(application)
             }
         }
 
+        // Populate initial habits and streak logs
+        viewModelScope.launch {
+            repository.allHabits.collect { list ->
+                if (list.isEmpty()) {
+                    seedDefaultHabits()
+                }
+            }
+        }
+
         // Initial calculations
         calculateAllDefaults()
     }
@@ -155,7 +219,14 @@ class FitnessViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun toggleDarkMode() {
-        _isDarkMode.value = !_isDarkMode.value
+        val newMode = !_isDarkMode.value
+        _isDarkMode.value = newMode
+        sharedPrefs.edit().putBoolean("pref_dark_theme", newMode).apply()
+    }
+
+    fun setDarkMode(enabled: Boolean) {
+        _isDarkMode.value = enabled
+        sharedPrefs.edit().putBoolean("pref_dark_theme", enabled).apply()
     }
 
     fun setAnalysisType(type: AnalysisType) {
@@ -236,6 +307,341 @@ class FitnessViewModel(application: Application) : AndroidViewModel(application)
     fun deleteWorkoutLog(workoutLog: WorkoutLogEntity) {
         viewModelScope.launch {
             repository.deleteWorkoutLog(workoutLog)
+        }
+    }
+
+    // Daily Habit Management
+    fun setSelectedHabitDate(date: String) {
+        _selectedHabitDate.value = date
+    }
+
+    fun toggleHabit(habitId: Long, dateString: String? = null, note: String = "") {
+        val targetDate = dateString ?: _selectedHabitDate.value
+        val isCurrentlyCompleted = habitLogs.value.any { it.habitId == habitId && it.dateFormatted == targetDate }
+        viewModelScope.launch {
+            repository.toggleHabitLog(habitId, targetDate, isCurrentlyCompleted, note)
+        }
+    }
+
+    fun addCustomHabit(
+        title: String,
+        category: String,
+        iconKey: String,
+        colorHex: Long,
+        frequency: String = "Daily",
+        targetDaily: Int = 1
+    ) {
+        viewModelScope.launch {
+            repository.addHabit(
+                title = title.trim(),
+                category = category,
+                iconKey = iconKey,
+                colorHex = colorHex,
+                frequency = frequency,
+                targetDaily = targetDaily
+            )
+        }
+    }
+
+    fun deleteHabit(habit: HabitEntity) {
+        viewModelScope.launch {
+            repository.deleteHabit(habit)
+        }
+    }
+
+    // Reminder Actions & Testing
+    fun dismissHabitReminder() {
+        _isReminderDismissed.value = true
+    }
+
+    fun triggerTest8PmReminder(context: android.content.Context? = null) {
+        _isReminderDismissed.value = false
+        _forceShowReminder.value = true
+        if (context != null) {
+            HabitReminderManager.postSystemNotification(context, habits.value.size)
+        }
+    }
+
+    fun resetReminderDismissal() {
+        _isReminderDismissed.value = false
+        _forceShowReminder.value = false
+    }
+
+    fun checkAndTrigger8PmNotification(context: android.content.Context) {
+        val totalHabits = habits.value.size
+        val todayStr = getTodayDateString()
+        val completedToday = habits.value.count { habit ->
+            habitLogs.value.any { it.habitId == habit.id && it.dateFormatted == todayStr && it.isCompleted }
+        }
+        if (HabitReminderManager.shouldShow8PmReminder(totalHabits, completedToday)) {
+            HabitReminderManager.postSystemNotification(context, totalHabits)
+        }
+    }
+
+    private suspend fun seedDefaultHabits() {
+        val habitWaterId = repository.addHabit(
+            title = "Drank 3L Water",
+            category = "Hydration",
+            iconKey = "water",
+            colorHex = 0xFF0284C7,
+            frequency = "Daily"
+        )
+        val habitCardioId = repository.addHabit(
+            title = "Cardio Session (30m)",
+            category = "Cardio",
+            iconKey = "cardio",
+            colorHex = 0xFFE11D48,
+            frequency = "Daily"
+        )
+        val habitProteinId = repository.addHabit(
+            title = "Hit 150g Protein Target",
+            category = "Nutrition",
+            iconKey = "protein",
+            colorHex = 0xFF16A34A,
+            frequency = "Daily"
+        )
+        val habitStepsId = repository.addHabit(
+            title = "10,000 Steps Walking",
+            category = "Steps",
+            iconKey = "steps",
+            colorHex = 0xFF6750A4,
+            frequency = "Daily"
+        )
+        val habitStretchId = repository.addHabit(
+            title = "Post-Workout Stretching & Mobility",
+            category = "Recovery",
+            iconKey = "stretch",
+            colorHex = 0xFFD97706,
+            frequency = "Daily"
+        )
+        val habitSleepId = repository.addHabit(
+            title = "8 Hours Restful Sleep",
+            category = "Sleep",
+            iconKey = "sleep",
+            colorHex = 0xFF7C3AED,
+            frequency = "Daily"
+        )
+        val habitSuppsId = repository.addHabit(
+            title = "Daily Vitamins & Creatine",
+            category = "Supplements",
+            iconKey = "pill",
+            colorHex = 0xFF0D9488,
+            frequency = "Daily"
+        )
+
+        // Seed realistic past logs for visual streaks (last 5 days)
+        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+        val cal = Calendar.getInstance()
+
+        // Days: 4 days ago, 3 days ago, 2 days ago, yesterday, today
+        for (i in 4 downTo 0) {
+            val logCal = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -i) }
+            val dateStr = sdf.format(logCal.time)
+
+            // Seed completions for water (5 day streak)
+            repository.logHabitExplicit(habitWaterId, dateStr, isCompleted = true)
+
+            // Seed completions for cardio (4 day streak)
+            if (i <= 3) {
+                repository.logHabitExplicit(habitCardioId, dateStr, isCompleted = true)
+            }
+
+            // Seed completions for protein (5 day streak)
+            repository.logHabitExplicit(habitProteinId, dateStr, isCompleted = true)
+
+            // Seed completions for steps (3 day streak)
+            if (i <= 2) {
+                repository.logHabitExplicit(habitStepsId, dateStr, isCompleted = true)
+            }
+
+            // Seed stretching (4 day streak)
+            if (i in 1..4) {
+                repository.logHabitExplicit(habitStretchId, dateStr, isCompleted = true)
+            }
+
+            // Seed sleep (5 day streak)
+            repository.logHabitExplicit(habitSleepId, dateStr, isCompleted = true)
+
+            // Seed supps (5 day streak)
+            repository.logHabitExplicit(habitSuppsId, dateStr, isCompleted = true)
+        }
+    }
+
+    // Streak & Heatmap computation utilities
+    fun calculateCurrentStreak(habitId: Long, logs: List<HabitLogEntity>): Int {
+        val completedDates = logs.filter { it.habitId == habitId && it.isCompleted }.map { it.dateFormatted }.toSet()
+        if (completedDates.isEmpty()) return 0
+
+        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+        val cal = Calendar.getInstance()
+        val todayStr = sdf.format(cal.time)
+
+        var streak = 0
+        val isTodayDone = completedDates.contains(todayStr)
+
+        if (isTodayDone) {
+            streak++
+            cal.add(Calendar.DAY_OF_YEAR, -1)
+            while (completedDates.contains(sdf.format(cal.time))) {
+                streak++
+                cal.add(Calendar.DAY_OF_YEAR, -1)
+            }
+        } else {
+            // Check if streak was active through yesterday
+            cal.add(Calendar.DAY_OF_YEAR, -1)
+            while (completedDates.contains(sdf.format(cal.time))) {
+                streak++
+                cal.add(Calendar.DAY_OF_YEAR, -1)
+            }
+        }
+        return streak
+    }
+
+    fun calculateBestStreak(habitId: Long, logs: List<HabitLogEntity>): Int {
+        val completedDates = logs.filter { it.habitId == habitId && it.isCompleted }
+            .map { it.dateFormatted }
+            .distinct()
+            .sorted()
+        if (completedDates.isEmpty()) return 0
+
+        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+        var maxStreak = 1
+        var currentStreak = 1
+
+        for (i in 0 until completedDates.size - 1) {
+            try {
+                val d1 = sdf.parse(completedDates[i])
+                val d2 = sdf.parse(completedDates[i + 1])
+                if (d1 != null && d2 != null) {
+                    val diffDays = ((d2.time - d1.time) / (1000 * 60 * 60 * 24)).toInt()
+                    if (diffDays == 1) {
+                        currentStreak++
+                        if (currentStreak > maxStreak) maxStreak = currentStreak
+                    } else if (diffDays > 1) {
+                        currentStreak = 1
+                    }
+                }
+            } catch (e: Exception) {
+                // ignore parsing error
+            }
+        }
+        return maxOf(maxStreak, calculateCurrentStreak(habitId, logs))
+    }
+
+    fun get7DayHeatmap(habitId: Long, logs: List<HabitLogEntity>, selectedDateString: String): List<HabitDayInfo> {
+        val completedDates = logs.filter { it.habitId == habitId && it.isCompleted }.map { it.dateFormatted }.toSet()
+        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+        val dayLetterFormat = SimpleDateFormat("EE", Locale.getDefault())
+        val dayNumFormat = SimpleDateFormat("d", Locale.getDefault())
+        val todayStr = sdf.format(Date())
+
+        val result = mutableListOf<HabitDayInfo>()
+        for (i in 6 downTo 0) {
+            val cal = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -i) }
+            val dateStr = sdf.format(cal.time)
+            val dayLetter = dayLetterFormat.format(cal.time).take(1).uppercase()
+            val dayNum = dayNumFormat.format(cal.time)
+
+            result.add(
+                HabitDayInfo(
+                    dateString = dateStr,
+                    dayLabel = dayLetter,
+                    dayNumber = dayNum,
+                    isCompleted = completedDates.contains(dateStr),
+                    isToday = dateStr == todayStr,
+                    isSelected = dateStr == selectedDateString
+                )
+            )
+        }
+        return result
+    }
+
+    fun markAllHabitsForDate(targetDate: String, isCompleted: Boolean) {
+        viewModelScope.launch {
+            val allHabits = habits.value
+            for (habit in allHabits) {
+                repository.logHabitExplicit(habit.id, targetDate, isCompleted)
+            }
+        }
+    }
+
+    fun calculateWeeklyConsistencySummary(
+        logs: List<HabitLogEntity>,
+        allHabits: List<HabitEntity>,
+        selectedDateString: String
+    ): WeeklyConsistencySummary {
+        val totalHabitsCount = allHabits.size
+        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+        val dayNameFormat = SimpleDateFormat("EEE", Locale.getDefault())
+        val dayNumFormat = SimpleDateFormat("d", Locale.getDefault())
+        val todayStr = getTodayDateString()
+
+        val daysList = mutableListOf<WeeklyDayConsistency>()
+        var totalCompletions = 0
+        var totalOpportunities = 0
+        var perfectDays = 0
+
+        for (i in 6 downTo 0) {
+            val cal = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -i) }
+            val dateStr = sdf.format(cal.time)
+            val dayName = dayNameFormat.format(cal.time)
+            val dayNum = dayNumFormat.format(cal.time)
+
+            val completedForDay = allHabits.count { habit ->
+                logs.any { it.habitId == habit.id && it.dateFormatted == dateStr && it.isCompleted }
+            }
+
+            val percentage = if (totalHabitsCount > 0) completedForDay.toFloat() / totalHabitsCount else 0f
+            if (completedForDay == totalHabitsCount && totalHabitsCount > 0) {
+                perfectDays++
+            }
+
+            totalCompletions += completedForDay
+            totalOpportunities += totalHabitsCount
+
+            daysList.add(
+                WeeklyDayConsistency(
+                    dateString = dateStr,
+                    dayOfWeekName = dayName,
+                    dayNumber = dayNum,
+                    completedHabitsCount = completedForDay,
+                    totalHabitsCount = totalHabitsCount,
+                    completionPercentage = percentage,
+                    isToday = dateStr == todayStr,
+                    isSelected = dateStr == selectedDateString
+                )
+            )
+        }
+
+        val avgPercent = if (totalOpportunities > 0) {
+            ((totalCompletions.toDouble() / totalOpportunities.toDouble()) * 100).toInt()
+        } else {
+            0
+        }
+
+        val statusText = when {
+            avgPercent >= 90 -> "🔥 Elite Discipline • Peak Consistency"
+            avgPercent >= 75 -> "⚡ High Momentum • Outstanding Work"
+            avgPercent >= 50 -> "🌱 Solid Progress • Keep Pushing"
+            else -> "🎯 Building Habits • Daily Effort Counts"
+        }
+
+        val activeStreaks = allHabits.count { calculateCurrentStreak(it.id, logs) > 0 }
+
+        return WeeklyConsistencySummary(
+            days = daysList,
+            averageConsistencyPercent = avgPercent,
+            totalHabitsCompletedThisWeek = totalCompletions,
+            perfectDaysCount = perfectDays,
+            consistencyStatusText = statusText,
+            activeStreaksCount = activeStreaks
+        )
+    }
+
+    companion object {
+        fun getTodayDateString(): String {
+            val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+            return sdf.format(Date())
         }
     }
 

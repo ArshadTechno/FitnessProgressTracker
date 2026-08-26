@@ -25,12 +25,14 @@ import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.MonitorWeight
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Whatshot
 import androidx.compose.material3.Divider
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -151,8 +153,16 @@ fun AppDrawer(
                 )
 
                 DrawerMenuItem(
+                    icon = Icons.Default.Whatshot,
+                    label = "Daily Habit Tracker",
+                    isSelected = currentScreen is ScreenDestination.DailyHabits,
+                    iconColor = Color(0xFFEA580C),
+                    onClick = { onNavigate(ScreenDestination.DailyHabits) }
+                )
+
+                DrawerMenuItem(
                     icon = Icons.Default.FitnessCenter,
-                    label = "Workout & Habit Log",
+                    label = "Workout & PR Logs",
                     isSelected = currentScreen is ScreenDestination.WorkoutLogs,
                     iconColor = Color(0xFFF97316),
                     onClick = { onNavigate(ScreenDestination.WorkoutLogs) }
@@ -220,33 +230,42 @@ fun AppDrawer(
                 )
             }
 
-            // Bottom Dark/Light Mode Row (matching screenshot 2)
-            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+            // Bottom Dark/Light Mode Row
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
 
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .clickable { onToggleDarkMode() }
                     .padding(horizontal = 20.dp, vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
-                    imageVector = Icons.Default.DarkMode,
-                    contentDescription = "Dark Mode",
-                    tint = EmeraldPrimary,
+                    imageVector = if (isDarkMode) Icons.Default.LightMode else Icons.Default.DarkMode,
+                    contentDescription = if (isDarkMode) "Light Mode" else "Dark Mode",
+                    tint = if (isDarkMode) Color(0xFFFFD54F) else EmeraldPrimary,
                     modifier = Modifier.size(24.dp)
                 )
 
                 Spacer(modifier = Modifier.width(16.dp))
 
-                Text(
-                    text = "Dark/Light Mode",
-                    style = MaterialTheme.typography.bodyLarge.copy(
-                        fontWeight = FontWeight.Medium,
-                        fontSize = 15.sp
-                    ),
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.weight(1f)
-                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = if (isDarkMode) "Dark Theme" else "Light Theme",
+                        style = MaterialTheme.typography.bodyLarge.copy(
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 15.sp
+                        ),
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = if (isDarkMode) "Tap to switch to light mode" else "Tap to switch to dark mode",
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontSize = 11.sp
+                        ),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
 
                 Switch(
                     checked = isDarkMode,

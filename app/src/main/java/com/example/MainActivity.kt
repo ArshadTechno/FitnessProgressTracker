@@ -1,11 +1,13 @@
 package com.example
 
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.DrawerValue
@@ -14,24 +16,30 @@ import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import com.example.ads.AdMobManager
 import com.example.ui.FitnessViewModel
 import com.example.ui.ScreenDestination
+import com.example.ui.components.AdMobBanner
 import com.example.ui.components.AppDrawer
 import com.example.ui.components.AppTopBar
+import com.example.ui.components.HabitReminderToastBanner
 import com.example.ui.components.RateUsDialog
 import com.example.ui.components.SettingsDialog
 import com.example.ui.components.shareAppIntent
 import com.example.ui.screens.AthleteBenchmarksScreen
 import com.example.ui.screens.CalculatorSuiteScreen
 import com.example.ui.screens.CameraAnalysisScreen
+import com.example.ui.screens.DailyHabitsScreen
 import com.example.ui.screens.GymsNearMeScreen
 import com.example.ui.screens.HomeScreen
 import com.example.ui.screens.MeasurementTrackerScreen
@@ -46,6 +54,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        AdMobManager.initialize(this)
         setContent {
             val isDarkMode by viewModel.isDarkMode.collectAsState()
 
@@ -61,12 +70,25 @@ fun FitnessApp(viewModel: FitnessViewModel) {
     val context = LocalContext.current
     val currentScreen by viewModel.currentScreen.collectAsState()
     val isDarkMode by viewModel.isDarkMode.collectAsState()
+    val show8PmReminder by viewModel.show8PmHabitReminder.collectAsState()
 
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val coroutineScope = rememberCoroutineScope()
 
     var showRateUsDialog by remember { mutableStateOf(false) }
     var showSettingsDialog by remember { mutableStateOf(false) }
+
+    // 8:00 PM Habit Check-in notification & toast trigger
+    LaunchedEffect(show8PmReminder) {
+        if (show8PmReminder) {
+            Toast.makeText(
+                context,
+                "🔥 8:00 PM Check-in: You haven't logged your daily habits yet!",
+                Toast.LENGTH_LONG
+            ).show()
+            viewModel.checkAndTrigger8PmNotification(context)
+        }
+    }
 
     // Intercept back button if drawer is open or if on sub-screen
     BackHandler(enabled = drawerState.isOpen || currentScreen !is ScreenDestination.Home) {
@@ -81,6 +103,7 @@ fun FitnessApp(viewModel: FitnessViewModel) {
         is ScreenDestination.Home -> "Fitness Progress"
         is ScreenDestination.CameraAnalysis -> "AI Camera Analysis"
         is ScreenDestination.Measurements -> "Body Measurements"
+        is ScreenDestination.DailyHabits -> "Daily Habit Tracker"
         is ScreenDestination.WorkoutLogs -> "Workout & PR Logs"
         is ScreenDestination.Calculators -> "Fitness Calculators"
         is ScreenDestination.GymsNearMe -> "Fitness Centers Near Me"
@@ -125,69 +148,100 @@ fun FitnessApp(viewModel: FitnessViewModel) {
                     onNavigateBack = { viewModel.navigateTo(ScreenDestination.Home) },
                     onOpenDrawer = {
                         coroutineScope.launch { drawerState.open() }
-                    }
+                    },
+                    isDarkMode = isDarkMode,
+                    onToggleDarkMode = { viewModel.toggleDarkMode() }
                 )
+            },
+            bottomBar = {
+                AdMobBanner()
             }
         ) { innerPadding ->
             val screenModifier = Modifier.padding(innerPadding)
 
-            when (currentScreen) {
-                is ScreenDestination.Home -> {
-                    HomeScreen(
-                        onNavigate = { viewModel.navigateTo(it) },
-                        onRateUsClicked = { showRateUsDialog = true },
-                        modifier = screenModifier
-                    )
+            Box(modifier = Modifier.fillMaxSize()) {
+                when (currentScreen) {
+                    is ScreenDestination.Home -> {
+                        HomeScreen(
+                            onNavigate = { viewModel.navigateTo(it) },
+                            onRateUsClicked = { showRateUsDialog = true },
+                            viewModel = viewModel,
+                            modifier = screenModifier
+                        )
+                    }
+
+                    is ScreenDestination.CameraAnalysis -> {
+                        CameraAnalysisScreen(
+                            viewModel = viewModel,
+                            modifier = screenModifier
+                        )
+                    }
+
+                    is ScreenDestination.Measurements -> {
+                        MeasurementTrackerScreen(
+                            viewModel = viewModel,
+                            modifier = screenModifier
+                        )
+                    }
+
+                    is ScreenDestination.DailyHabits -> {
+                        DailyHabitsScreen(
+                            viewModel = viewModel,
+                            modifier = screenModifier
+                        )
+                    }
+
+                    is ScreenDestination.WorkoutLogs -> {
+                        WorkoutLogsScreen(
+                            viewModel = viewModel,
+                            modifier = screenModifier
+                        )
+                    }
+
+                    is ScreenDestination.Calculators -> {
+                        CalculatorSuiteScreen(
+                            viewModel = viewModel,
+                            initialTab = 1, // BMI & Health tab
+                            modifier = screenModifier
+                        )
+                    }
+
+                    is ScreenDestination.GoalCountdown -> {
+                        CalculatorSuiteScreen(
+                            viewModel = viewModel,
+                            initialTab = 0, // Active Days & Goal Deadline tab
+                            modifier = screenModifier
+                        )
+                    }
+
+                    is ScreenDestination.GymsNearMe -> {
+                        GymsNearMeScreen(
+                            modifier = screenModifier
+                        )
+                    }
+
+                    is ScreenDestination.AthleteBenchmarks -> {
+                        AthleteBenchmarksScreen(
+                            modifier = screenModifier
+                        )
+                    }
                 }
 
-                is ScreenDestination.CameraAnalysis -> {
-                    CameraAnalysisScreen(
-                        viewModel = viewModel,
-                        modifier = screenModifier
-                    )
-                }
-
-                is ScreenDestination.Measurements -> {
-                    MeasurementTrackerScreen(
-                        viewModel = viewModel,
-                        modifier = screenModifier
-                    )
-                }
-
-                is ScreenDestination.WorkoutLogs -> {
-                    WorkoutLogsScreen(
-                        viewModel = viewModel,
-                        modifier = screenModifier
-                    )
-                }
-
-                is ScreenDestination.Calculators -> {
-                    CalculatorSuiteScreen(
-                        viewModel = viewModel,
-                        initialTab = 1, // BMI & Health tab
-                        modifier = screenModifier
-                    )
-                }
-
-                is ScreenDestination.GoalCountdown -> {
-                    CalculatorSuiteScreen(
-                        viewModel = viewModel,
-                        initialTab = 0, // Active Days & Goal Deadline tab
-                        modifier = screenModifier
-                    )
-                }
-
-                is ScreenDestination.GymsNearMe -> {
-                    GymsNearMeScreen(
-                        modifier = screenModifier
-                    )
-                }
-
-                is ScreenDestination.AthleteBenchmarks -> {
-                    AthleteBenchmarksScreen(
-                        modifier = screenModifier
-                    )
-                }
+                // 8:00 PM Habit Reminder Toast Banner
+                HabitReminderToastBanner(
+                    isVisible = show8PmReminder,
+                    onLogHabitsClick = {
+                        viewModel.navigateTo(ScreenDestination.DailyHabits)
+                        viewModel.dismissHabitReminder()
+                    },
+                    onDismiss = {
+                        viewModel.dismissHabitReminder()
+                        Toast.makeText(context, "Reminder dismissed for today", Toast.LENGTH_SHORT).show()
+                    },
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(innerPadding)
+                )
             }
         }
     }
@@ -197,6 +251,10 @@ fun FitnessApp(viewModel: FitnessViewModel) {
     }
 
     if (showSettingsDialog) {
-        SettingsDialog(onDismiss = { showSettingsDialog = false })
+        SettingsDialog(
+            isDarkMode = isDarkMode,
+            onToggleDarkMode = { viewModel.toggleDarkMode() },
+            onDismiss = { showSettingsDialog = false }
+        )
     }
 }

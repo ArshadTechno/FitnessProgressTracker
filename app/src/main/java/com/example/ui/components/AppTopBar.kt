@@ -1,5 +1,10 @@
 package com.example.ui.components
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -14,6 +19,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material3.AlertDialog
@@ -48,6 +55,8 @@ fun AppTopBar(
     canNavigateBack: Boolean,
     onNavigateBack: () -> Unit,
     onOpenDrawer: () -> Unit,
+    isDarkMode: Boolean = false,
+    onToggleDarkMode: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var showProDialog by remember { mutableStateOf(false) }
@@ -103,12 +112,44 @@ fun AppTopBar(
                 modifier = Modifier.weight(1f)
             )
 
+            // Global Dark / Light Theme Toggle Button in TopBar
+            IconButton(
+                onClick = onToggleDarkMode,
+                modifier = Modifier
+                    .testTag("top_bar_theme_toggle_button")
+                    .padding(end = 2.dp)
+            ) {
+                AnimatedContent(
+                    targetState = isDarkMode,
+                    transitionSpec = {
+                        fadeIn(animationSpec = tween(220)) togetherWith fadeOut(animationSpec = tween(220))
+                    },
+                    label = "theme_toggle_anim"
+                ) { dark ->
+                    if (dark) {
+                        Icon(
+                            imageVector = Icons.Default.LightMode,
+                            contentDescription = "Switch to Light Mode",
+                            tint = Color(0xFFFFD54F),
+                            modifier = Modifier.size(24.dp)
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.DarkMode,
+                            contentDescription = "Switch to Dark Mode",
+                            tint = Color.White,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
+            }
+
             // Gold Pro Crown Badge
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(12.dp))
                     .clickable { showProDialog = true }
-                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
