@@ -23,16 +23,18 @@ jobs:
       run: find . -name "gradlew" -exec chmod +x {} + || true
 
     - name: Generate dummy debug keystore
-      run: keytool -genkey -v -keystore debug. Keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "C=US, O=Android, CN=Android Debug"
+      run: |
+        keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
 
     - name: Build Debug APK
       run: |
+        export GRADLE_OPTS="-Djava.awt.headless=true"
         if [ -f "gradlew" ]; then
-          ./gradlew assembleDebug
+          ./gradlew :app:assembleDebug -Djava.awt.headless=true
         elif [ -d "android" ] && [ -f "android/gradlew" ]; then
-          cd android && ./gradlew assembleDebug
+          cd android && ./gradlew :app:assembleDebug -Djava.awt.headless=true
         else
-          gradle assembleDebug
+          gradle :app:assembleDebug -Djava.awt.headless=true
         fi
 
     - name: Upload all APKs
