@@ -16,9 +16,12 @@ import com.awscubetech.fitnesstracker.data.local.FitnessScanEntity
 import com.awscubetech.fitnesstracker.data.local.HabitDayInfo
 import com.awscubetech.fitnesstracker.data.local.HabitEntity
 import com.awscubetech.fitnesstracker.data.local.HabitLogEntity
+import com.awscubetech.fitnesstracker.data.local.SavedGymEntity
+import com.awscubetech.fitnesstracker.data.local.AthleteGoalEntity
 import com.awscubetech.fitnesstracker.data.local.WeeklyDayConsistency
 import com.awscubetech.fitnesstracker.data.local.WeeklyConsistencySummary
 import com.awscubetech.fitnesstracker.data.local.WorkoutLogEntity
+import com.awscubetech.fitnesstracker.data.models.FitnessStaticData
 import com.awscubetech.fitnesstracker.data.repository.FitnessRepository
 import com.awscubetech.fitnesstracker.domain.FitnessCalculators
 import com.awscubetech.fitnesstracker.util.HabitReminderManager
@@ -63,6 +66,8 @@ class FitnessViewModel(application: Application) : AndroidViewModel(application)
     val workoutLogs: StateFlow<List<WorkoutLogEntity>>
     val habits: StateFlow<List<HabitEntity>>
     val habitLogs: StateFlow<List<HabitLogEntity>>
+    val savedGyms: StateFlow<List<SavedGymEntity>>
+    val primaryAthleteGoal: StateFlow<AthleteGoalEntity?>
 
     private val _selectedHabitDate = MutableStateFlow(getTodayDateString())
     val selectedHabitDate: StateFlow<String> = _selectedHabitDate.asStateFlow()
@@ -158,6 +163,18 @@ class FitnessViewModel(application: Application) : AndroidViewModel(application)
             emptyList()
         )
 
+        savedGyms = repository.allSavedGyms.stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5000),
+            emptyList()
+        )
+
+        primaryAthleteGoal = repository.primaryAthleteGoal.stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5000),
+            null
+        )
+
         show8PmHabitReminder = combine(
             habits,
             habitLogs,
@@ -206,6 +223,53 @@ class FitnessViewModel(application: Application) : AndroidViewModel(application)
             repository.allHabits.collect { list ->
                 if (list.isEmpty()) {
                     seedDefaultHabits()
+                }
+            }
+        }
+
+        // Populate initial gyms if database is empty
+        viewModelScope.launch {
+            repository.allSavedGyms.collect { list ->
+                if (list.isEmpty()) {
+                    FitnessStaticData.fitnessCenters.forEach { center ->
+                        repository.insertGymDirect(
+                            SavedGymEntity(
+                                name = center.name,
+                                category = center.category,
+                                rating = center.rating,
+                                reviewCount = center.reviewCount,
+                                distanceKm = center.distanceKm,
+                                address = center.address,
+                                openingHours = center.openingHours,
+                                isOpenNow = center.isOpenNow,
+                                facilitiesCsv = center.facilities.joinToString(", "),
+                                phoneNumber = center.phoneNumber,
+                                isCustomUserGym = false,
+                                isFavorite = center.id == "gym_1"
+                            )
+                        )
+                    }
+                }
+            }
+        }
+
+        // Populate initial athlete goal if empty
+        viewModelScope.launch {
+            repository.primaryAthleteGoal.collect { goal ->
+                if (goal == null) {
+                    repository.saveAthleteGoal(
+                        AthleteGoalEntity(
+                            id = "primary_goal",
+                            benchmarkId = "ath_1",
+                            benchmarkName = "Classic Bodybuilding Standard",
+                            targetBenchKg = 140.0,
+                            targetSquatKg = 180.0,
+                            targetDeadliftKg = 220.0,
+                            userCurrentBenchKg = 85.0,
+                            userCurrentSquatKg = 110.0,
+                            userCurrentDeadliftKg = 135.0
+                        )
+                    )
                 }
             }
         }
@@ -739,6 +803,107 @@ class FitnessViewModel(application: Application) : AndroidViewModel(application)
         calculateOneRepMax()
         calculateHeartRate()
         calculateGoalDates()
+    }
+
+    fun addCustomGym(
+        name: String,
+        category: String,
+        address: String,
+        phoneNumber: String = "+1 (555) 000-1234",
+        facilitiesCsv: String = "Weights, Cardio, Locker Rooms",
+        openingHours: String = "6:00 AM - 10:00 PM"
+    ) {
+        viewModelScope.launch {
+            repository.addGym(
+                name = name,
+                category = category,
+                address = address,
+                phoneNumber = phoneNumber,
+                facilitiesCsv = facilitiesCsv,
+                openingHours = openingHours,
+                rating = 5.0,
+                distanceKm = 0.5,
+                isCustomUserGym = true
+            )
+        }
+    }
+
+    fun toggleGymFavorite(gym: SavedGymEntity) {
+        viewModelScope.launch {
+            repository.toggleGymFavorite(gym)
+        }
+    }
+
+    fun deleteGym(gym: SavedGymEntity) {
+        viewModelScope.launch {
+            repository.deleteGym(gym)
+        }
+    }
+
+    fun updateAthleteGoal(
+        benchmarkId: String,
+        benchmarkName: String,
+        targetBenchKg: Double,
+        targetSquatKg: Double,
+        targetDeadliftKg: Double,
+        userCurrentBenchKg: Double,
+        userCurrentSquatKg: Double,
+        userCurrentDeadliftKg: Double
+    ) {
+        viewModelScope.launch {
+            repository.saveAthleteGoal(
+                AthleteGoalEntity(
+                    id = "primary_goal",
+                    benchmarkId = benchmarkId,
+                    benchmarkName = benchmarkName,
+                    targetBenchKg = targetBenchKg,
+                    targetSquatKg = targetSquatKg,
+                    targetDeadliftKg = targetDeadliftKg,
+                    userCurrentBenchKg = userCurrentBenchKg,
+                    userCurrentSquatKg = userCurrentSquatKg,
+                    userCurrentDeadliftKg = userCurrentDeadliftKg,
+                    updatedTimestamp = System.currentTimeMillis()
+                )
+            )
+        }
+    }
+
+    fun updateUserCurrentPrs(benchKg: Double, squatKg: Double, deadliftKg: Double) {
+        viewModelScope.launch {
+            val current = primaryAthleteGoal.value ?: AthleteGoalEntity()
+            repository.saveAthleteGoal(
+                current.copy(
+                    userCurrentBenchKg = benchKg,
+                    userCurrentSquatKg = squatKg,
+                    userCurrentDeadliftKg = deadliftKg,
+                    updatedTimestamp = System.currentTimeMillis()
+                )
+            )
+        }
+    }
+
+    fun getGreetingMessage(): String {
+        val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+        return when (hour) {
+            in 5..11 -> "Good Morning, Athlete"
+            in 12..16 -> "Good Afternoon, Athlete"
+            in 17..21 -> "Good Evening, Athlete"
+            else -> "Late Night Grind, Athlete"
+        }
+    }
+
+    fun getDynamicDailyQuote(): Pair<String, String> {
+        val quotes = listOf(
+            "Progress is built through daily relentless execution." to "Atomic Habits Rule",
+            "True strength is forged when consistency meets discipline." to "Champion Mindset",
+            "Small 1% improvements compound into monumental transformation." to "Hypertrophy Science",
+            "Recovery is not idle time; it is where muscle protein synthesis happens." to "Physiology Insight",
+            "The body achieves what the disciplined mind believes." to "Peak Athletic Form",
+            "Focus on form, progressive overload, and adequate hydration." to "Biomechanics Standard",
+            "Consistency over intensity: show up every single day." to "Iron Principle"
+        )
+        val dayOfYear = Calendar.getInstance().get(Calendar.DAY_OF_YEAR)
+        return quotes[dayOfYear % quotes.size]
     }
 
     private fun createSampleAthleticFrame(): Bitmap {

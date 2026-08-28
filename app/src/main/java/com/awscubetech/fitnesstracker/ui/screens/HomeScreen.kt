@@ -91,9 +91,21 @@ fun HomeScreen(
 
     val habits = viewModel?.habits?.collectAsState()?.value ?: emptyList()
     val habitLogs = viewModel?.habitLogs?.collectAsState()?.value ?: emptyList()
+    val measurements = viewModel?.measurements?.collectAsState()?.value ?: emptyList()
+    val workoutLogs = viewModel?.workoutLogs?.collectAsState()?.value ?: emptyList()
+    val primaryGoal = viewModel?.primaryAthleteGoal?.collectAsState()?.value
+
     val weeklySummary = remember(habitLogs, habits, todayDateString) {
         viewModel?.calculateWeeklyConsistencySummary(habitLogs, habits, todayDateString)
     }
+
+    val greeting = remember { viewModel?.getGreetingMessage() ?: "Good Day, Athlete" }
+    val (dailyQuote, quoteTag) = remember { viewModel?.getDynamicDailyQuote() ?: ("Progress is built through daily execution." to "Habit Principle") }
+
+    val latestMeasurement = measurements.firstOrNull()
+    val initialMeasurement = measurements.lastOrNull()
+    val totalWorkouts = workoutLogs.size
+    val totalCalories = workoutLogs.sumOf { it.caloriesBurned }
 
     LazyColumn(
         modifier = modifier
@@ -102,12 +114,12 @@ fun HomeScreen(
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        // 1. Hero Vibes Banner (Matching Geometric Balance hero)
+        // 1. Dynamic Hero Vibes Banner
         item {
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(180.dp)
+                    .height(190.dp)
                     .testTag("hero_banner_card"),
                 shape = RoundedCornerShape(24.dp),
                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
@@ -127,8 +139,8 @@ fun HomeScreen(
                             .background(
                                 Brush.verticalGradient(
                                     colors = listOf(
-                                        Color(0xFF21005D).copy(alpha = 0.4f),
-                                        Color(0xFF141218).copy(alpha = 0.8f)
+                                        Color(0xFF21005D).copy(alpha = 0.45f),
+                                        Color(0xFF141218).copy(alpha = 0.85f)
                                     )
                                 )
                             )
@@ -146,11 +158,11 @@ fun HomeScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "DAILY VIBE • $todayFormatted",
+                                text = "$greeting • $todayFormatted",
                                 color = Color(0xFFD0BCFF),
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
-                                letterSpacing = 1.sp
+                                letterSpacing = 0.5.sp
                             )
                             Box(
                                 modifier = Modifier
@@ -159,7 +171,7 @@ fun HomeScreen(
                                     .padding(horizontal = 8.dp, vertical = 3.dp)
                             ) {
                                 Text(
-                                    text = "AI SYMMETRY",
+                                    text = quoteTag.uppercase(),
                                     color = Color.White,
                                     fontSize = 9.sp,
                                     fontWeight = FontWeight.Black,
@@ -173,11 +185,13 @@ fun HomeScreen(
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text(
-                                text = "GEOMETRIC BALANCE",
+                                text = "\"$dailyQuote\"",
                                 color = Color.White,
-                                fontSize = 22.sp,
-                                fontWeight = FontWeight.Black,
-                                letterSpacing = 1.5.sp
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                textAlign = TextAlign.Center,
+                                lineHeight = 20.sp,
+                                modifier = Modifier.padding(horizontal = 8.dp)
                             )
                             Spacer(modifier = Modifier.height(10.dp))
                             OutlinedButton(
@@ -188,11 +202,11 @@ fun HomeScreen(
                                 shape = RoundedCornerShape(12.dp),
                                 border = BorderStroke(1.5.dp, Color(0xFFD0BCFF)),
                                 colors = ButtonDefaults.outlinedButtonColors(
-                                    containerColor = Color(0xFF6750A4).copy(alpha = 0.45f)
+                                    containerColor = Color(0xFF6750A4).copy(alpha = 0.5f)
                                 )
                             ) {
                                 Text(
-                                    text = "START AI BODY SCAN",
+                                    text = "START AI PROGRESS SCAN",
                                     color = Color.White,
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
@@ -201,25 +215,117 @@ fun HomeScreen(
                             }
                         }
 
-                        // Carousel Dots
+                        // Bottom dynamic indicators
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.Center,
+                            horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(7.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(0xFFD0BCFF))
+                            Text(
+                                text = "${habits.size} Daily Habits • ${totalWorkouts} Workouts Logged",
+                                color = Color(0xFFEADDFF),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Medium
                             )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Box(
-                                modifier = Modifier
-                                    .size(7.dp)
-                                    .clip(CircleShape)
-                                    .background(Color.White.copy(alpha = 0.4f))
+                            Text(
+                                text = "AI ACTIVE",
+                                color = EmeraldPrimary,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
                             )
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. Real Live KPI Dashboard Summary Card
+        if (latestMeasurement != null || workoutLogs.isNotEmpty()) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Weight Metric
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { onNavigate(ScreenDestination.Measurements) },
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text("Current Weight", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = if (latestMeasurement != null) "${latestMeasurement.weightKg} kg" else "--",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp,
+                                color = EmeraldPrimary
+                            )
+                            if (latestMeasurement != null && initialMeasurement != null && latestMeasurement.id != initialMeasurement.id) {
+                                val diff = latestMeasurement.weightKg - initialMeasurement.weightKg
+                                val sign = if (diff > 0) "+" else ""
+                                Text("$sign${String.format(Locale.US, "%.1f", diff)} kg net", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .height(36.dp)
+                                .width(1.dp)
+                                .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
+                        )
+
+                        // Workouts & Calories
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { onNavigate(ScreenDestination.WorkoutLogs) },
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text("Total Burned", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "$totalCalories kcal",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp,
+                                color = Color(0xFFE11D48)
+                            )
+                            Text("$totalWorkouts sessions", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .height(36.dp)
+                                .width(1.dp)
+                                .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
+                        )
+
+                        // Active PR Bench Target
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { onNavigate(ScreenDestination.AthleteBenchmarks) },
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text("Bench PR Target", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(modifier = Modifier.height(2.dp))
+                            val benchStr = if (primaryGoal != null) "${primaryGoal.userCurrentBenchKg.toInt()}/${primaryGoal.targetBenchKg.toInt()}k" else "85/140k"
+                            Text(
+                                text = benchStr,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp,
+                                color = GoldAccent
+                            )
+                            Text("PR Goals", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }

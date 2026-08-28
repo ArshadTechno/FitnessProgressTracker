@@ -8,6 +8,8 @@ import com.awscubetech.fitnesstracker.data.local.FitnessDao
 import com.awscubetech.fitnesstracker.data.local.FitnessScanEntity
 import com.awscubetech.fitnesstracker.data.local.HabitEntity
 import com.awscubetech.fitnesstracker.data.local.HabitLogEntity
+import com.awscubetech.fitnesstracker.data.local.SavedGymEntity
+import com.awscubetech.fitnesstracker.data.local.AthleteGoalEntity
 import com.awscubetech.fitnesstracker.data.local.WorkoutLogEntity
 import kotlinx.coroutines.flow.Flow
 import java.text.SimpleDateFormat
@@ -21,6 +23,8 @@ class FitnessRepository(private val fitnessDao: FitnessDao) {
     val allWorkoutLogs: Flow<List<WorkoutLogEntity>> = fitnessDao.getAllWorkoutLogs()
     val allHabits: Flow<List<HabitEntity>> = fitnessDao.getAllHabits()
     val allHabitLogs: Flow<List<HabitLogEntity>> = fitnessDao.getAllHabitLogs()
+    val allSavedGyms: Flow<List<SavedGymEntity>> = fitnessDao.getAllSavedGyms()
+    val primaryAthleteGoal: Flow<AthleteGoalEntity?> = fitnessDao.getPrimaryAthleteGoal()
 
     suspend fun saveScanResult(result: FitnessAnalysisResult, notes: String = ""): Long {
         val dateFormat = SimpleDateFormat("dd - MM - yyyy", Locale.getDefault())
@@ -158,5 +162,49 @@ class FitnessRepository(private val fitnessDao: FitnessDao) {
         } else {
             fitnessDao.deleteHabitLog(habitId, dateFormatted)
         }
+    }
+
+    // Gyms API
+    suspend fun addGym(
+        name: String,
+        category: String,
+        address: String,
+        phoneNumber: String = "+1 555-0100",
+        facilitiesCsv: String = "Weights, Racks, Cardio",
+        openingHours: String = "24/7 Access",
+        rating: Double = 4.8,
+        distanceKm: Double = 1.0,
+        isCustomUserGym: Boolean = true
+    ): Long {
+        val gym = SavedGymEntity(
+            name = name,
+            category = category,
+            address = address,
+            phoneNumber = phoneNumber,
+            facilitiesCsv = facilitiesCsv,
+            openingHours = openingHours,
+            rating = rating,
+            distanceKm = distanceKm,
+            isCustomUserGym = isCustomUserGym,
+            isFavorite = false
+        )
+        return fitnessDao.insertGym(gym)
+    }
+
+    suspend fun toggleGymFavorite(gym: SavedGymEntity) {
+        fitnessDao.updateGym(gym.copy(isFavorite = !gym.isFavorite))
+    }
+
+    suspend fun deleteGym(gym: SavedGymEntity) {
+        fitnessDao.deleteGym(gym)
+    }
+
+    suspend fun insertGymDirect(gym: SavedGymEntity): Long {
+        return fitnessDao.insertGym(gym)
+    }
+
+    // Athlete Goals API
+    suspend fun saveAthleteGoal(goal: AthleteGoalEntity) {
+        fitnessDao.setAthleteGoal(goal)
     }
 }

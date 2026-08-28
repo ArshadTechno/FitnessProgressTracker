@@ -81,4 +81,27 @@ interface FitnessDao {
 
     @Query("DELETE FROM habit_logs WHERE habitId = :habitId")
     suspend fun clearLogsForHabit(habitId: Long)
+
+    // Saved Gyms
+    @Query("SELECT * FROM saved_gyms ORDER BY isFavorite DESC, id ASC")
+    fun getAllSavedGyms(): Flow<List<SavedGymEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertGym(gym: SavedGymEntity): Long
+
+    @Update
+    suspend fun updateGym(gym: SavedGymEntity)
+
+    @Delete
+    suspend fun deleteGym(gym: SavedGymEntity)
+
+    @Query("DELETE FROM saved_gyms WHERE id = :id")
+    suspend fun deleteGymById(id: Long)
+
+    // Athlete Goals
+    @Query("SELECT * FROM athlete_goals WHERE id = 'primary_goal'")
+    fun getPrimaryAthleteGoal(): Flow<AthleteGoalEntity?>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun setAthleteGoal(goal: AthleteGoalEntity)
 }

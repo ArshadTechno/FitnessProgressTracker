@@ -74,6 +74,39 @@ data class HabitLogEntity(
     val note: String = ""
 )
 
+@Entity(tableName = "saved_gyms")
+data class SavedGymEntity(
+    @PrimaryKey(autoGenerate = true)
+    val id: Long = 0,
+    val name: String,
+    val category: String, // "Powerlifting", "CrossFit", "24/7 Gym", "Commercial", "Calisthenics", "Boxing"
+    val rating: Double = 4.8,
+    val reviewCount: Int = 120,
+    val distanceKm: Double = 1.0,
+    val address: String,
+    val openingHours: String = "6:00 AM - 10:00 PM",
+    val isOpenNow: Boolean = true,
+    val facilitiesCsv: String = "Free Weights, Squat Racks, Cardio, Locker Rooms",
+    val phoneNumber: String = "+1 555-0199",
+    val isCustomUserGym: Boolean = false,
+    val isFavorite: Boolean = false
+)
+
+@Entity(tableName = "athlete_goals")
+data class AthleteGoalEntity(
+    @PrimaryKey
+    val id: String = "primary_goal",
+    val benchmarkId: String = "ath_1",
+    val benchmarkName: String = "Classic Bodybuilding Standard",
+    val targetBenchKg: Double = 140.0,
+    val targetSquatKg: Double = 180.0,
+    val targetDeadliftKg: Double = 220.0,
+    val userCurrentBenchKg: Double = 85.0,
+    val userCurrentSquatKg: Double = 110.0,
+    val userCurrentDeadliftKg: Double = 135.0,
+    val updatedTimestamp: Long = System.currentTimeMillis()
+)
+
 data class HabitDayInfo(
     val dateString: String,
     val dayLabel: String,

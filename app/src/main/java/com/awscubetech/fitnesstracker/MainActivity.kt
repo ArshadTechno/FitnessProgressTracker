@@ -221,12 +221,14 @@ fun FitnessApp(viewModel: FitnessViewModel) {
 
                     is ScreenDestination.GymsNearMe -> {
                         GymsNearMeScreen(
+                            viewModel = viewModel,
                             modifier = screenModifier
                         )
                     }
 
                     is ScreenDestination.AthleteBenchmarks -> {
                         AthleteBenchmarksScreen(
+                            viewModel = viewModel,
                             modifier = screenModifier
                         )
                     }

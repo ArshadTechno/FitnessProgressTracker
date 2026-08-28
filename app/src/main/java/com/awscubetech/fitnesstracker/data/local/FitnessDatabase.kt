@@ -11,9 +11,11 @@ import androidx.room.RoomDatabase
         BodyMeasurementEntity::class,
         WorkoutLogEntity::class,
         HabitEntity::class,
-        HabitLogEntity::class
+        HabitLogEntity::class,
+        SavedGymEntity::class,
+        AthleteGoalEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class FitnessDatabase : RoomDatabase() {
